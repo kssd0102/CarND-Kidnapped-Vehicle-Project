@@ -92,13 +92,13 @@ void ParticleFilter::dataAssociation(vector<LandmarkObs> predicted,
    *   probably find it useful to implement this method and use it as a helper 
    *   during the updateWeights phase.
    */
-  for(int i; i < observations.size(); i++){
+  for(int i = 0; i < observations.size(); i++){
     LandmarkObs o = observations[i];
     //init mimimun distance
     double min_dist = std::numeric_limits<double>::max();
     int map_id = -1;
 
-    for(int j; j < predicted.size(); j++){
+    for(int j = 0; j < predicted.size(); j++){
       LandmarkObs p = predicted[i];
       double current_dist = dist(p.x, p.y, o.x, o.y);
       if(current_dist < min_dist){
@@ -127,7 +127,51 @@ void ParticleFilter::updateWeights(double sensor_range, double std_landmark[],
    *   and the following is a good resource for the actual equation to implement
    *   (look at equation 3.33) http://planning.cs.uiuc.edu/node99.html
    */
+  double s_x = std_landmark[0];
+  double s_y = std_landmark[1];
 
+  for(int i = 0; i < num_particles; ++i){
+    double p_x = particles[i].x;
+    double p_y = particles[i].y;
+    double p_theta = particles[i].theta;
+
+    vector<LandmarkObs> predicted;
+
+    for(int j = 0; j < map_landmarks.landmark_list.size(); ++j){
+      double lm_x = map_landmarks.landmark_list[j].x_f;
+      double lm_y = map_landmarks.landmark_list[j].y_f;
+      int lm_id = map_landmarks.landmark_list[j].id_i;
+
+      if(dist(p_x, p_y, lm_x, lm_y) < sensor_range){
+        predicted.push_back(LandmarkObs{lm_id, lm_x, lm_y});
+      }
+    }
+
+    vector<LandmarkObs> transformed_obs;
+
+    for(int j = 0; j < observations.size(); ++j){
+      double t_x = p_x + cos(p_theta)*observations[j].x - sin(p_theta)*observations[j].y;
+      double t_y = p_y + sin(p_theta)*observations[j].x + cos(p_theta)*observations[j].y;
+      transformed_obs.push_back(LandmarkObs{observations[j].id, t_x, t_y});
+    }
+
+    dataAssociation(predicted, transformed_obs);
+
+    //reinit the weight
+    particles[i].weight = 1.0;
+
+    for(int k = 0; k < transformed_obs.size(); ++k){
+      int idx = 0;
+      while(transformed_obs[k].id != predicted[idx].id){
+        idx ++;
+      }
+      double pr_x = predicted[idx].x;
+      double pr_y = predicted[idx].y;
+      double o_x = transformed_obs[k].x;
+      double o_y = transformed_obs[k].y;
+      particles[i].weight *= ( 1/(2*M_PI*s_x*s_y)) * exp(-(pow(pr_x-o_x,2)/(2*pow(s_x, 2)) + (pow(pr_y-o_y,2)/(2*pow(s_y, 2)))));
+    }
+  }
 }
 
 void ParticleFilter::resample() {
